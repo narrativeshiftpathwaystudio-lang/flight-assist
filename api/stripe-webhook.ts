@@ -1,5 +1,8 @@
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
+
+export const config = { api: { bodyParser: false } };
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-07-29.dahlia" });
 
@@ -8,20 +11,31 @@ const supabaseAdmin = createClient(
   process.env.SUPABASE_SERVICE_ROLE_KEY!,
 );
 
-export default async function handler(request: Request): Promise<Response> {
-  if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+function readRawBody(req: VercelRequest): Promise<Buffer> {
+  return new Promise((resolve, reject) => {
+    const chunks: Buffer[] = [];
+    req.on("data", (chunk: Buffer) => chunks.push(chunk));
+    req.on("end", () => resolve(Buffer.concat(chunks)));
+    req.on("error", reject);
+  });
+}
+
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") {
+    res.status(405).send("Method not allowed");
+    return;
   }
 
-  const signature = request.headers.get("stripe-signature");
-  const rawBody = await request.text();
+  const signature = req.headers["stripe-signature"];
+  const rawBody = await readRawBody(req);
 
   let event: Stripe.Event;
   try {
-    event = stripe.webhooks.constructEvent(rawBody, signature ?? "", process.env.STRIPE_WEBHOOK_SECRET!);
+    event = stripe.webhooks.constructEvent(rawBody, signature as string, process.env.STRIPE_WEBHOOK_SECRET!);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Invalid signature";
-    return new Response(`Webhook signature verification failed: ${message}`, { status: 400 });
+    res.status(400).send(`Webhook signature verification failed: ${message}`);
+    return;
   }
 
   if (event.type === "checkout.session.completed") {
@@ -31,13 +45,11 @@ export default async function handler(request: Request): Promise<Response> {
     if (userId) {
       const { error } = await supabaseAdmin.from("profiles").update({ is_premium: true }).eq("id", userId);
       if (error) {
-        return new Response(`Failed to update profile: ${error.message}`, { status: 500 });
+        res.status(500).send(`Failed to update profile: ${error.message}`);
+        return;
       }
     }
   }
 
-  return new Response(JSON.stringify({ received: true }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  res.status(200).json({ received: true });
 }

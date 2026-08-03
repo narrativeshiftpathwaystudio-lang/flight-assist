@@ -1,3 +1,4 @@
+import type { VercelRequest, VercelResponse } from "@vercel/node";
 import Stripe from "stripe";
 import { createClient } from "@supabase/supabase-js";
 
@@ -5,24 +6,27 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2026-07
 
 const supabase = createClient(process.env.VITE_SUPABASE_URL!, process.env.VITE_SUPABASE_ANON_KEY!);
 
-export default async function handler(request: Request): Promise<Response> {
-  if (request.method !== "POST") {
-    return new Response("Method not allowed", { status: 405 });
+export default async function handler(req: VercelRequest, res: VercelResponse) {
+  if (req.method !== "POST") {
+    res.status(405).json({ error: "Method not allowed" });
+    return;
   }
 
-  const authHeader = request.headers.get("authorization") ?? "";
+  const authHeader = req.headers.authorization ?? "";
   const token = authHeader.replace(/^Bearer\s+/i, "");
   if (!token) {
-    return new Response(JSON.stringify({ error: "Missing access token" }), { status: 401 });
+    res.status(401).json({ error: "Missing access token" });
+    return;
   }
 
   const { data: userData, error: userError } = await supabase.auth.getUser(token);
   if (userError || !userData.user) {
-    return new Response(JSON.stringify({ error: "Invalid session" }), { status: 401 });
+    res.status(401).json({ error: "Invalid session" });
+    return;
   }
   const user = userData.user;
 
-  const origin = new URL(request.url).origin;
+  const origin = `https://${req.headers.host}`;
 
   const session = await stripe.checkout.sessions.create({
     mode: "payment",
@@ -34,8 +38,5 @@ export default async function handler(request: Request): Promise<Response> {
     cancel_url: `${origin}/before-you-go?checkout=cancel`,
   });
 
-  return new Response(JSON.stringify({ url: session.url }), {
-    status: 200,
-    headers: { "content-type": "application/json" },
-  });
+  res.status(200).json({ url: session.url });
 }
