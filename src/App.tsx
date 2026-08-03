@@ -6,6 +6,7 @@ import { BeforeYouGo } from "./pages/BeforeYouGo";
 import { AtTheAirport } from "./pages/AtTheAirport";
 import { InTransit } from "./pages/InTransit";
 import { Arrival } from "./pages/Arrival";
+import { ResetPassword } from "./pages/ResetPassword";
 
 function App() {
   return (
@@ -18,6 +19,7 @@ function App() {
           <Route path="/at-the-airport" element={<AtTheAirport />} />
           <Route path="/in-transit" element={<InTransit />} />
           <Route path="/arrival" element={<Arrival />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
         </Routes>
       </main>
       <Footer />

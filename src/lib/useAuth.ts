@@ -31,5 +31,15 @@ export function useAuth() {
     return supabase.auth.signOut();
   }
 
-  return { user, loading, signUp, signIn, signOut };
+  function resetPasswordForEmail(email: string) {
+    return supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+  }
+
+  function updatePassword(password: string) {
+    return supabase.auth.updateUser({ password });
+  }
+
+  return { user, loading, signUp, signIn, signOut, resetPasswordForEmail, updatePassword };
 }
