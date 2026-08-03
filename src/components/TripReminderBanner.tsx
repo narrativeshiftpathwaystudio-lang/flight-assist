@@ -1,4 +1,5 @@
 import { Link } from "react-router-dom";
+import { useAuth } from "../lib/useAuth";
 import { useTrips } from "../lib/useTrips";
 import { getUpcomingTrip } from "../lib/upcomingTrip";
 import { combinedProgress } from "../lib/tripProgress";
@@ -11,7 +12,8 @@ function countdownText(days: number) {
 }
 
 export function TripReminderBanner() {
-  const { trips } = useTrips();
+  const { user } = useAuth();
+  const { trips } = useTrips(user);
   const trip = getUpcomingTrip(trips);
 
   if (!trip) return null;

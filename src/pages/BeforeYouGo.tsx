@@ -13,16 +13,23 @@ import { TripNameField } from "../components/checklist/TripNameField";
 import { TripDetailsFields } from "../components/checklist/TripDetailsFields";
 import { UpgradeCard } from "../components/monetization/UpgradeCard";
 import { AuthCard } from "../components/auth/AuthCard";
+import { MigrationPrompt } from "../components/checklist/MigrationPrompt";
 import { Reveal } from "../components/Reveal";
 import { FlightPathDivider } from "../components/FlightPathDivider";
 
 const FREE_TRIP_LIMIT = 1;
 
 export function BeforeYouGo() {
+  const { user } = useAuth();
+  const { isPremium, upgrade, downgrade } = useProfile(user);
   const {
     trips,
     activeTrip,
     template,
+    loading,
+    localTripsToMigrate,
+    migrateLocalTrips,
+    dismissMigration,
     createTrip,
     selectTrip,
     renameTrip,
@@ -40,14 +47,13 @@ export function BeforeYouGo() {
     addResearchItem,
     removeResearchItem,
     researchProgress,
-  } = useTrips();
-  const { user } = useAuth();
-  const { isPremium, upgrade, downgrade } = useProfile(user);
+  } = useTrips(user);
   const [creatingNew, setCreatingNew] = useState(false);
 
+  const showMigration = !loading && localTripsToMigrate.length > 0;
   const atFreeLimit = !isPremium && trips.length >= FREE_TRIP_LIMIT;
   const showUpgrade = creatingNew && atFreeLimit;
-  const showPicker = (trips.length === 0 || creatingNew) && !showUpgrade;
+  const showPicker = !showMigration && (trips.length === 0 || creatingNew) && !showUpgrade;
 
   function handleSelectTemplate(templateId: string) {
     createTrip(templateId);
@@ -110,7 +116,17 @@ export function BeforeYouGo() {
         )}
 
         <div className="mt-8">
-          {showUpgrade ? (
+          {loading ? (
+            <p className="text-sm text-ink-soft">Loading your trips…</p>
+          ) : showMigration ? (
+            <Reveal>
+              <MigrationPrompt
+                trips={localTripsToMigrate}
+                onMigrate={migrateLocalTrips}
+                onDismiss={dismissMigration}
+              />
+            </Reveal>
+          ) : showUpgrade ? (
             <Reveal>
               {!user ? (
                 <AuthCard />
