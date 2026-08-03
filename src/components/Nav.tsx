@@ -1,9 +1,17 @@
+import { useEffect, useState } from "react";
 import { NavLink } from "react-router-dom";
 import { stages } from "../data/stages";
 import { useAuth } from "../lib/useAuth";
+import { Modal } from "./Modal";
+import { AuthCard } from "./auth/AuthCard";
 
 export function Nav() {
   const { user, signOut } = useAuth();
+  const [showAuth, setShowAuth] = useState(false);
+
+  useEffect(() => {
+    if (user) setShowAuth(false);
+  }, [user]);
 
   return (
     <header className="sticky top-0 z-50 border-b border-sand-200/70 bg-cream/90 backdrop-blur-sm print:hidden">
@@ -29,18 +37,24 @@ export function Nav() {
               </NavLink>
             ))}
           </nav>
-          {user && (
-            <button
-              onClick={() => signOut()}
-              className="hidden text-sm font-medium text-ink-soft hover:text-ink md:block"
-            >
-              Sign out
-            </button>
-          )}
+          <button
+            onClick={() => (user ? signOut() : setShowAuth(true))}
+            className="hidden text-sm font-medium text-ink-soft hover:text-ink md:block"
+          >
+            {user ? "Sign out" : "Sign in"}
+          </button>
           <select
             className="rounded-full border border-sand-200 bg-cream px-3 py-2 text-sm text-ink md:hidden"
             onChange={(e) => {
-              if (e.target.value) window.location.assign(e.target.value);
+              const value = e.target.value;
+              if (value === "__auth__") {
+                setShowAuth(true);
+              } else if (value === "__signout__") {
+                signOut();
+              } else if (value) {
+                window.location.assign(value);
+              }
+              e.target.value = "";
             }}
             defaultValue=""
             aria-label="Navigate to stage"
@@ -54,9 +68,20 @@ export function Nav() {
                 {stage.name}
               </option>
             ))}
+            {user ? (
+              <option value="__signout__">Sign out</option>
+            ) : (
+              <option value="__auth__">Sign in</option>
+            )}
           </select>
         </div>
       </div>
+
+      {showAuth && (
+        <Modal onClose={() => setShowAuth(false)}>
+          <AuthCard />
+        </Modal>
+      )}
     </header>
   );
 }
