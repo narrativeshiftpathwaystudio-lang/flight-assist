@@ -1,5 +1,5 @@
 interface UpgradeCardProps {
-  onUpgrade: () => void;
+  onUpgrade: () => void | Promise<void>;
   onCancel?: () => void;
 }
 
@@ -34,7 +34,7 @@ export function UpgradeCard({ onUpgrade, onCancel }: UpgradeCardProps) {
           onClick={onUpgrade}
           className="rounded-full bg-clay-500 px-6 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-clay-600"
         >
-          Upgrade to Premium
+          Upgrade to Premium — $9 one-time
         </button>
         {onCancel && (
           <button onClick={onCancel} className="text-sm font-medium text-ink-soft underline decoration-sand-300 underline-offset-4 hover:text-ink">

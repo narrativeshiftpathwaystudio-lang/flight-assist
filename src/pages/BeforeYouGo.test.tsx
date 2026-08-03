@@ -1,6 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import type { Mock } from "vitest";
 import { render, screen, fireEvent, waitFor } from "@testing-library/react";
+import { MemoryRouter } from "react-router-dom";
 import { BeforeYouGo } from "./BeforeYouGo";
 import { useAuth } from "../lib/useAuth";
 import { useProfile } from "../lib/useProfile";
@@ -38,13 +39,6 @@ const mockedUseAuth = useAuth as Mock;
 const mockedUseProfile = useProfile as Mock;
 
 function setAuthState({ user, isPremium }: { user: { id: string } | null; isPremium: boolean }) {
-  const upgrade = vi.fn(async () => {
-    setAuthState({ user, isPremium: true });
-  });
-  const downgrade = vi.fn(async () => {
-    setAuthState({ user, isPremium: false });
-  });
-
   mockedUseAuth.mockReturnValue({
     user,
     loading: false,
@@ -52,12 +46,22 @@ function setAuthState({ user, isPremium }: { user: { id: string } | null; isPrem
     signIn: vi.fn(),
     signOut: vi.fn(),
   });
-  mockedUseProfile.mockReturnValue({ isPremium, loading: false, upgrade, downgrade });
+  const profile = { isPremium, loading: false, refresh: vi.fn(), startCheckout: vi.fn() };
+  mockedUseProfile.mockReturnValue(profile);
+  return profile;
+}
+
+function renderPage() {
+  return render(
+    <MemoryRouter>
+      <BeforeYouGo />
+    </MemoryRouter>,
+  );
 }
 
 /** Cloud-mode tests start logged-in with a fresh (empty) account; wait past the initial fetch. */
 async function renderSignedIn() {
-  render(<BeforeYouGo />);
+  renderPage();
   await waitFor(() => expect(screen.queryByText("Loading your trips…")).not.toBeInTheDocument());
 }
 
@@ -89,12 +93,12 @@ describe("BeforeYouGo", () => {
   });
 
   it("shows the template picker when there are no trips", () => {
-    render(<BeforeYouGo />);
+    renderPage();
     expect(screen.getByText("Start your packing list")).toBeInTheDocument();
   });
 
   it("creates a trip and shows its checklist", () => {
-    render(<BeforeYouGo />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: /International Trip/ }));
     expect(screen.getByText("Packing")).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "Money & Cards" })).toBeInTheDocument();
@@ -102,7 +106,7 @@ describe("BeforeYouGo", () => {
   });
 
   it("prompts sign-in (not the upgrade card) when a signed-out user hits the free plan limit", () => {
-    render(<BeforeYouGo />);
+    renderPage();
     fireEvent.click(screen.getByRole("button", { name: /International Trip/ }));
     fireEvent.click(screen.getByText("+ New trip"));
 
@@ -123,18 +127,29 @@ describe("BeforeYouGo", () => {
     expect(screen.queryByText("Welcome back")).not.toBeInTheDocument();
   });
 
-  it("upgrading removes the free plan trip limit", async () => {
-    setAuthState({ user: { id: "user-1" }, isPremium: false });
+  it("clicking Upgrade to Premium starts a Stripe checkout", async () => {
+    const profile = setAuthState({ user: { id: "user-1" }, isPremium: false });
     await renderSignedIn();
     setNextResult({ data: cloudTripRow(), error: null });
     fireEvent.click(screen.getByRole("button", { name: /International Trip/ }));
     await waitFor(() => screen.getByText("+ New trip"));
     fireEvent.click(screen.getByText("+ New trip"));
-    await waitFor(() => screen.getByText("Upgrade to Premium"));
-    fireEvent.click(screen.getByText("Upgrade to Premium"));
+    await waitFor(() => screen.getByText(/Upgrade to Premium/));
+    fireEvent.click(screen.getByText(/Upgrade to Premium/));
 
+    expect(profile.startCheckout).toHaveBeenCalled();
+  });
+
+  it("premium users aren't limited to one trip", async () => {
+    setAuthState({ user: { id: "user-1" }, isPremium: true });
+    await renderSignedIn();
+    setNextResult({ data: cloudTripRow(), error: null });
+    fireEvent.click(screen.getByRole("button", { name: /International Trip/ }));
+    await waitFor(() => screen.getByText("+ New trip"));
     fireEvent.click(screen.getByText("+ New trip"));
+
     expect(screen.getByText("Add another trip")).toBeInTheDocument();
+    expect(screen.queryByText("You've used your free trip")).not.toBeInTheDocument();
   });
 
   it("only shows the PDF export link for premium users", async () => {
@@ -142,11 +157,14 @@ describe("BeforeYouGo", () => {
     await renderSignedIn();
     setNextResult({ data: cloudTripRow(), error: null });
     fireEvent.click(screen.getByRole("button", { name: /International Trip/ }));
-    await waitFor(() => expect(screen.queryByText("Print / Save as PDF")).not.toBeInTheDocument());
+    expect(screen.queryByText("Print / Save as PDF")).not.toBeInTheDocument();
+  });
 
-    fireEvent.click(screen.getByText("+ New trip"));
-    await waitFor(() => screen.getByText("Upgrade to Premium"));
-    fireEvent.click(screen.getByText("Upgrade to Premium"));
-    expect(screen.getByText("Print / Save as PDF")).toBeInTheDocument();
+  it("shows the PDF export link for premium users", async () => {
+    setAuthState({ user: { id: "user-1" }, isPremium: true });
+    await renderSignedIn();
+    setNextResult({ data: cloudTripRow(), error: null });
+    fireEvent.click(screen.getByRole("button", { name: /International Trip/ }));
+    await waitFor(() => expect(screen.getByText("Print / Save as PDF")).toBeInTheDocument());
   });
 });

@@ -26,3 +26,6 @@ dist-ssr
 
 # Claude Code local session state
 .claude/
+.agents/
+skills-lock.json
+.env*

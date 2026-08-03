@@ -6,6 +6,11 @@ export function useProfile(user: User | null) {
   const [isPremium, setIsPremium] = useState(false);
   const [loading, setLoading] = useState(true);
 
+  async function fetchProfile(currentUser: User) {
+    const { data } = await supabase.from("profiles").select("is_premium").eq("id", currentUser.id).single();
+    setIsPremium(data?.is_premium ?? false);
+  }
+
   useEffect(() => {
     if (!user) {
       setIsPremium(false);
@@ -16,33 +21,33 @@ export function useProfile(user: User | null) {
     let cancelled = false;
     setLoading(true);
 
-    supabase
-      .from("profiles")
-      .select("is_premium")
-      .eq("id", user.id)
-      .single()
-      .then(({ data }) => {
-        if (cancelled) return;
-        setIsPremium(data?.is_premium ?? false);
-        setLoading(false);
-      });
+    fetchProfile(user).then(() => {
+      if (!cancelled) setLoading(false);
+    });
 
     return () => {
       cancelled = true;
     };
   }, [user]);
 
-  async function upgrade() {
+  async function refresh() {
     if (!user) return;
-    setIsPremium(true);
-    await supabase.from("profiles").update({ is_premium: true }).eq("id", user.id);
+    await fetchProfile(user);
   }
 
-  async function downgrade() {
+  async function startCheckout() {
     if (!user) return;
-    setIsPremium(false);
-    await supabase.from("profiles").update({ is_premium: false }).eq("id", user.id);
+    const { data } = await supabase.auth.getSession();
+    const token = data.session?.access_token;
+    if (!token) return;
+
+    const response = await fetch("/api/create-checkout-session", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    const { url } = await response.json();
+    if (url) window.location.href = url;
   }
 
-  return { isPremium, loading, upgrade, downgrade };
+  return { isPremium, loading, refresh, startCheckout };
 }

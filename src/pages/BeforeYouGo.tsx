@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { useTrips } from "../lib/useTrips";
 import { useAuth } from "../lib/useAuth";
 import { useProfile } from "../lib/useProfile";
@@ -19,9 +20,14 @@ import { FlightPathDivider } from "../components/FlightPathDivider";
 
 const FREE_TRIP_LIMIT = 1;
 
+const CHECKOUT_POLL_ATTEMPTS = 5;
+const CHECKOUT_POLL_INTERVAL_MS = 1500;
+
 export function BeforeYouGo() {
   const { user } = useAuth();
-  const { isPremium, upgrade, downgrade } = useProfile(user);
+  const { isPremium, refresh, startCheckout } = useProfile(user);
+  const [searchParams, setSearchParams] = useSearchParams();
+  const [confirmingUpgrade, setConfirmingUpgrade] = useState(false);
   const {
     trips,
     activeTrip,
@@ -49,6 +55,39 @@ export function BeforeYouGo() {
     researchProgress,
   } = useTrips(user);
   const [creatingNew, setCreatingNew] = useState(false);
+
+  const checkoutStatus = searchParams.get("checkout");
+
+  useEffect(() => {
+    if (checkoutStatus !== "success") return;
+
+    setSearchParams(
+      (params) => {
+        params.delete("checkout");
+        return params;
+      },
+      { replace: true },
+    );
+
+    if (isPremium) return;
+
+    setConfirmingUpgrade(true);
+    let attempts = 0;
+    const interval = setInterval(async () => {
+      attempts += 1;
+      await refresh();
+      if (attempts >= CHECKOUT_POLL_ATTEMPTS) {
+        clearInterval(interval);
+        setConfirmingUpgrade(false);
+      }
+    }, CHECKOUT_POLL_INTERVAL_MS);
+
+    return () => clearInterval(interval);
+  }, [checkoutStatus]);
+
+  useEffect(() => {
+    if (isPremium) setConfirmingUpgrade(false);
+  }, [isPremium]);
 
   const showMigration = !loading && localTripsToMigrate.length > 0;
   const atFreeLimit = !isPremium && trips.length >= FREE_TRIP_LIMIT;
@@ -91,13 +130,8 @@ export function BeforeYouGo() {
           >
             {isPremium ? "Premium" : "Free plan"}
           </span>
-          {isPremium && (
-            <button
-              onClick={downgrade}
-              className="text-xs font-medium text-ink-soft underline decoration-sand-300 underline-offset-4 hover:text-ink"
-            >
-              Restore free plan
-            </button>
+          {confirmingUpgrade && (
+            <span className="text-xs font-medium text-ink-soft">Finishing up your upgrade…</span>
           )}
         </div>
 
@@ -133,8 +167,7 @@ export function BeforeYouGo() {
               ) : (
                 <UpgradeCard
                   onUpgrade={() => {
-                    upgrade();
-                    setCreatingNew(false);
+                    startCheckout();
                   }}
                   onCancel={() => setCreatingNew(false)}
                 />
